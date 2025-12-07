@@ -7,6 +7,9 @@ import threading
 from typing import List, Dict, Any, Optional
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
+
+from youtube_downloader.constants import FilePath
+
 try:
     from colorama import init as colorama_init, Fore, Style
     colorama_init()
@@ -154,7 +157,7 @@ def download_url(url: str, output_dir: str, idx: int, total: int,
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Download YouTube URLs (one per line) via yt-dlp.")
     p.add_argument("urls_file", help="Path to the text file containing URLs (one per line).")
-    p.add_argument("output_dir", nargs="?", default=DEFAULT_OUTPUT_DIR,
+    p.add_argument("output_dir", nargs="?", default=FilePath.DEFAULT_OUTPUT_DIR,
                    help="Optional output directory (default: YT-DLP-downloads)")
     p.add_argument("--cookiefile", "-c", default=None,
                    help="Path to cookies.txt exported from browser (optional).")
