@@ -7,7 +7,7 @@ def load_urls(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
         return [line.strip() for line in f.readlines() if line.strip()]
 
-def download_url(url, output_dir="downloads"):
+def download_url(url, output_dir="yt-dlp-downloads"):
     """
     Download a YouTube video or playlist using yt-dlp.
     Automatically expands playlists.
@@ -20,7 +20,8 @@ def download_url(url, output_dir="downloads"):
         "retries": 10,                # retry network issues
         "concurrent_fragment_downloads": 5,
         # "format": "bv*+ba/b",         # best video + best audio
-        "format": "bv*[height=1080]+ba/b"
+        # "format": "bv*[height=1080]+ba/b",
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4" # forces MP4 output
     }
 
     with YoutubeDL(ydl_opts) as ydl:
