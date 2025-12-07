@@ -56,9 +56,10 @@ def make_ydl_opts(output_dir: str,
         "concurrent_fragment_downloads": 5,
         "nooverwrites": True,
         "merge_output_format": "mp4",
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4", # forces MP4 output
+        # "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4", # forces MP4 output
+        "format": "bv*+ba/b",
         # be a bit quieter about cookies/js runtime if we set extractor args below
-        "extractor_args": {"youtube": {"player_client": "default"}},
+        # "extractor_args": {"youtube": {"player_client": "default"}},
         # hooks: progress (download), postprocessor events
         "progress_hooks": [progress_hook],
         # avoid printing full debug stack by default

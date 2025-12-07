@@ -14,7 +14,7 @@ colorama = "^0.4.6"
 python-common-lib = "1.0.19"
 
 [tool.poetry.scripts]
-youtube-downloader = "youtube_downloader.download_from_file:main"
+youtube-downloader-videos = "youtube_downloader.download_videos_from_file:main"
 
 [build-system]
 requires = ["poetry-core"]
