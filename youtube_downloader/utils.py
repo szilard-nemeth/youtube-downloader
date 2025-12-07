@@ -1,8 +1,10 @@
 import logging
 import os
+import pathlib
 from copy import copy
 from logging.handlers import TimedRotatingFileHandler
 from os.path import expanduser
+from typing import List
 
 from pythoncommons.constants import ExecutionMode
 from pythoncommons.logging_setup import DEFAULT_FORMAT, SimpleLoggingSetupConfig, SimpleLoggingSetup
@@ -104,3 +106,14 @@ class LoggingUtils:
 
         for handler in filtered_handlers:
             logger.removeHandler(handler)
+
+
+class FileUtils:
+    @staticmethod
+    def load_urls(file_path: str) -> List[str]:
+        p = pathlib.Path(file_path)
+        if not p.exists():
+            raise FileNotFoundError(f"URLs file not found: {file_path}")
+        with p.open("r", encoding="utf-8") as fh:
+            lines = [l.strip() for l in fh.readlines() if l.strip() and not l.strip().startswith("#")]
+        return lines

@@ -9,6 +9,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
 from youtube_downloader.constants import FilePath
+from youtube_downloader.utils import FileUtils
 
 try:
     from colorama import init as colorama_init, Fore, Style
@@ -21,14 +22,6 @@ except Exception:
 
 LOCK = threading.Lock()
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.expanduser("~"), "yt-dlp-downloads")
-
-def load_urls(file_path: str) -> List[str]:
-    p = pathlib.Path(file_path)
-    if not p.exists():
-        raise FileNotFoundError(f"URLs file not found: {file_path}")
-    with p.open("r", encoding="utf-8") as fh:
-        lines = [l.strip() for l in fh.readlines() if l.strip() and not l.strip().startswith("#")]
-    return lines
 
 def make_ydl_opts(output_dir: str,
                   cookiefile: Optional[str],
@@ -172,7 +165,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     args = build_argparser().parse_args(argv)
 
     try:
-        urls = load_urls(args.urls_file)
+        urls = FileUtils.load_urls(args.urls_file)
     except FileNotFoundError as e:
         print(f"{Fore.RED}{e}{Style.RESET_ALL}")
         sys.exit(2)

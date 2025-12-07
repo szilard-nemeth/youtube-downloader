@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 
 from youtube_downloader.cache import VideoTitleCache
 from youtube_downloader.service import TitleService, YoutubeOps
-from youtube_downloader.utils import LoggingUtils
+from youtube_downloader.utils import LoggingUtils, FileUtils
 
 try:
     from colorama import init as colorama_init, Fore, Style
@@ -49,14 +49,6 @@ def make_ydl_opts(cookiefile: Optional[str] = None,
 
     return ydl_opts
 
-def load_urls(file_path: str) -> List[str]:
-    p = pathlib.Path(file_path)
-    if not p.exists():
-        raise FileNotFoundError(f"URLs file not found: {file_path}")
-    with p.open("r", encoding="utf-8") as fh:
-        lines = [l.strip() for l in fh.readlines() if l.strip() and not l.strip().startswith("#")]
-    return lines
-
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Get YouTube video titles by URLs (one per line)")
     p.add_argument("urls_file", help="Path to the text file containing URLs (one per line).")
@@ -72,7 +64,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     level = LoggingUtils.init_with_basic_config(debug=True)
 
     try:
-        urls = load_urls(args.urls_file)
+        urls = FileUtils.load_urls(args.urls_file)
     except FileNotFoundError as e:
         print(f"{Fore.RED}{e}{Style.RESET_ALL}")
         sys.exit(2)
