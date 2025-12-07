@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "youtube-downloader"
+version = "0.1.0"
+description = "Download YouTube videos and playlists from a file using yt-dlp"
+authors = ["Puki <puki@example.com>"]
+readme = "README.md"
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+yt-dlp = ">=2025.11.12"
+
+[tool.poetry.scripts]
+youtube-downloader = "youtube_downloader.download_youtube_from_file:main"
+
+[tool.poetry.packages]
+include = ["youtube_downloader"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
