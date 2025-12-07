@@ -10,6 +10,7 @@ packages = [{include = "youtube_downloader"}]
 [tool.poetry.dependencies]
 python = "^3.10"
 yt-dlp = ">=2025.11.12"
+colorama = "^0.4.6"
 
 [tool.poetry.scripts]
 youtube-downloader = "youtube_downloader.download_from_file:main"
