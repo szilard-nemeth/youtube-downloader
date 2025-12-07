@@ -1,5 +1,10 @@
 from __future__ import annotations
+
+import collections
+import json
+import logging
 import os
+import subprocess
 import sys
 import argparse
 import pathlib
@@ -9,7 +14,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
 from youtube_downloader.constants import FilePath
-from youtube_downloader.utils import FileUtils
+from youtube_downloader.utils import FileUtils, LoggingUtils
 
 try:
     from colorama import init as colorama_init, Fore, Style
@@ -22,6 +27,10 @@ except Exception:
 
 LOCK = threading.Lock()
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.expanduser("~"), "yt-dlp-downloads")
+PROCESSED_FILES = dict()
+
+import logging
+LOG = logging.getLogger(__name__)
 
 def make_ydl_opts(output_dir: str,
                   cookiefile: Optional[str],
@@ -42,15 +51,15 @@ def make_ydl_opts(output_dir: str,
     ydl_opts: Dict[str, Any] = {
         # Template: base / playlist_title / title.ext
         "outtmpl": os.path.join(output_dir, "%(playlist_title)s/%(title)s.%(ext)s"),
-        "ignoreerrors": True,         # continue on errors
+        "ignoreerrors": False,         # continue on errors
         "noplaylist": False,          # allow playlists
         "continuedl": True,           # resume partial downloads
         "retries": 10,                # retry network issues
         "concurrent_fragment_downloads": 5,
         "nooverwrites": True,
-        "merge_output_format": "mp4",
         # "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4", # forces MP4 output
-        "format": "bv*+ba/b",
+        # "format": "bv*+ba/b",
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
         # be a bit quieter about cookies/js runtime if we set extractor args below
         # "extractor_args": {"youtube": {"player_client": "default"}},
         # hooks: progress (download), postprocessor events
@@ -58,7 +67,14 @@ def make_ydl_opts(output_dir: str,
         # avoid printing full debug stack by default
         "quiet": False,
         "verbose": False,
-        # use browser cookies automatically if requested
+        # Fail if merge can't happen
+        # abort if incompatible streams are selected
+        # print a clear FFmpeg error
+        # never produce a silent broken MP4
+        "force_no_merge": False,
+        "merge_output_format": "mp4",
+        "compat_opts": ["force-merge"],
+        "postprocessor_hooks": [post_hook, verify_output],
     }
 
     # Use browser cookies if requested
@@ -102,8 +118,9 @@ def progress_hook(status: Dict[str, Any]) -> None:
             else:
                 print(f"{Fore.CYAN}[DL]{Style.RESET_ALL} {filename}  {format_speed(speed)}")
         elif st == "finished":
-            filename = status.get("filename") or ""
+            filename = status.get("filename") or status.get("tmpfilename") or ""
             print(f"{Fore.GREEN}[MERGE]{Style.RESET_ALL} Download finished, now post-processing: {filename}")
+            # store the filename for later verification by postprocessor hook
         elif st == "error":
             print(f"{Fore.RED}[ERROR]{Style.RESET_ALL} {status}")
         else:
@@ -121,6 +138,71 @@ def format_speed(speed: Optional[float]) -> str:
             return f"{s:0.1f}{u}"
         s /= 1024.0
     return f"{s:.1f}TB/s"
+
+def post_hook(d):
+    LOG.info("post_hook: %s, %s", d["status"], d.get("info_dict", {}).get("filepath"))
+
+def verify_output(d: Dict[str, Any]) -> None:
+    """
+    postprocessor hook to verify the final output file has a video stream.
+    Falls back to recently finished filenames captured from progress_hook.
+    """
+    # Try common keys first
+    # filepath = info.get("filepath") or info.get("filename") or info.get("_filename")
+    info_dict = d.get("info_dict", {})
+    filepath = info_dict.get("filepath")
+    status = d.get("status")
+
+    if status != "finished":
+        return
+    url = info_dict.get("original_url")
+    LOG.debug("Verify output. Filepath: %s", filepath)
+
+    if not filepath:
+        LOG.debug("Skipping verification — no filepath yet (status=%s)", status)
+        return
+
+    # Only verify MP4 output files
+    if not filepath.lower().endswith(".mp4"):
+        LOG.debug("Skipping verification for file: %s", filepath)
+        return  # skip verification for non-MP4 artifacts
+
+    if not filepath:
+        # Still nothing to verify (best effort) — log and raise to make it loud
+        pass
+        # raise DownloadError(f"verify_output: No filename available in postprocessor info for video: {d.get('id') or d.get('url') or d.get('title')}")
+
+    LOG.debug("Starting verification. Filepath: %s", filepath)
+    # Normalize
+    filepath = os.path.abspath(filepath)
+
+    if not os.path.exists(filepath):
+        return
+        # raise DownloadError(f"Postprocessor expected output file not found: {filepath}")
+
+    # Run ffprobe to get stream info as JSON
+    try:
+        cmd = ["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filepath]
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if proc.returncode != 0:
+            raise DownloadError(f"ffprobe failed for {filepath}: {proc.stderr.strip()}")
+        probe = json.loads(proc.stdout) if proc.stdout else {}
+    except FileNotFoundError:
+        raise DownloadError("ffprobe not found — please install ffmpeg (ffprobe).")
+    except json.JSONDecodeError:
+        raise DownloadError(f"ffprobe returned invalid JSON for {filepath}")
+
+    streams = probe.get("streams", [])
+    video_streams = [s for s in streams if s.get("codec_type") == "video"]
+    if not video_streams:
+        raise DownloadError(f"Output file has NO video stream: {filepath}")
+
+    # Skip duplicates
+    if url in PROCESSED_FILES:
+        return
+    PROCESSED_FILES[url] = filepath
+    # optional: also check duration > 0, width/height, etc.
+
 
 def download_url(url: str, output_dir: str, idx: int, total: int,
                  cookiefile: Optional[str], use_browser_cookies: bool) -> None:
@@ -163,6 +245,7 @@ def build_argparser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[List[str]] = None) -> None:
     args = build_argparser().parse_args(argv)
+    level = LoggingUtils.init_with_basic_config(debug=True)
 
     try:
         urls = FileUtils.load_urls(args.urls_file)
@@ -196,6 +279,13 @@ def main(argv: Optional[List[str]] = None) -> None:
                      total=total,
                      cookiefile=args.cookiefile,
                      use_browser_cookies=use_browser_cookies)
+
+    # Ensure all files were processed by ffprobe
+    processed_set = set(PROCESSED_FILES.keys())
+    all_urls = set(urls)
+    diff = all_urls.difference(processed_set)
+    if diff:
+        raise ValueError("The following URLs result files were not processed by ffprobe: {}".format(diff))
 
 if __name__ == "__main__":
     main()
