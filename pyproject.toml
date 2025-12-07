@@ -15,6 +15,7 @@ python-common-lib = "1.0.19"
 
 [tool.poetry.scripts]
 youtube-downloader-videos = "youtube_downloader.download_videos_from_file:main"
+youtube-downloader-audios = "youtube_downloader.download_audio_from_file:main"
 
 [build-system]
 requires = ["poetry-core"]
