@@ -9,10 +9,11 @@ yt-dlp -F "https://youtu.be/ZRfiLKxBl7c"
 yt-dlp --cookies-from-browser chrome -F "https://youtu.be/ZRfiLKxBl7c"
 ```
 
-Playing with various formats
+Downloading with various formats
 ```shell
 yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4" "https://youtu.be/ZRfiLKxBl7c"
 yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best" "https://youtu.be/ZRfiLKxBl7c"
+yt-dlp -x --audio-format mp3 "https://youtu.be/ZRfiLKxBl7c"
 ```
 
 Use browser cookies from Chrome
@@ -42,11 +43,19 @@ poetry run youtube-downloader-get-titles --force-download /Users/szilardnemeth/D
 poetry run youtube-downloader-get-titles --force-download --no-browser-cookies /Users/szilardnemeth/Downloads/youtube-download.txt
 ```
 
-# Troubleshooting
+## Useful links
+- https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#installation 
+- https://github.com/yt-dlp/yt-dlp/wiki/EJS#notes
+- https://pypi.org/project/yt-dlp/
+- https://www.reddit.com/r/youtubedl/comments/15xqg3t/ytdlp_for_dummies/
+- https://www.reddit.com/r/youtubedl/comments/1efqwrt/python_api/
 
-## Issues found
 
-### JS Challenge solver - Deno cannot download npm dependencies
+## Troubleshooting
+
+### Issues found
+
+#### JS Challenge solver - Deno cannot download npm dependencies
 JS challenges are solved by a JS Challenge Provider.
 `deno` is not installed correctly for some reason.
 This can only be seen if trace logging is enabled.
