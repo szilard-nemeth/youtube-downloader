@@ -21,9 +21,32 @@ yt-dlp --cookies-from-browser chrome -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/m
 yt-dlp --cookies-from-browser chrome -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best" "https://youtu.be/ZRfiLKxBl7c"
 ```
 
+## Example commands (poetry)
 
+### Download mp3 files
+```shell
+poetry run youtube-downloader-audios --no-browser-cookies /Users/szilardnemeth/Downloads/youtube-download-mp3.txt
+```
 
-# Issues found
+### Download videos
+```shell
+poetry run youtube-downloader-videos --no-browser-cookies /Users/szilardnemeth/Downloads/youtube-download.txt
+poetry run youtube-downloader-videos /Users/szilardnemeth/Downloads/youtube-download.txt
+poetry run youtube-downloader-videos --no-browser-cookies /Users/szilardnemeth/Downloads/youtube-download-temp.txt
+```
+
+### Get video titles
+```shell
+poetry run youtube-downloader-get-titles /Users/szilardnemeth/Downloads/youtube-download.txt
+poetry run youtube-downloader-get-titles --force-download /Users/szilardnemeth/Downloads/youtube-download.txt
+poetry run youtube-downloader-get-titles --force-download --no-browser-cookies /Users/szilardnemeth/Downloads/youtube-download.txt
+```
+
+# Troubleshooting
+
+## Issues found
+
+### JS Challenge solver - Deno cannot download npm dependencies
 JS challenges are solved by a JS Challenge Provider.
 `deno` is not installed correctly for some reason.
 This can only be seen if trace logging is enabled.
