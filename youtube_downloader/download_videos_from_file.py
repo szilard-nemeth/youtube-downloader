@@ -28,13 +28,15 @@ except Exception:
 LOCK = threading.Lock()
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.expanduser("~"), "yt-dlp-downloads")
 PROCESSED_FILES = dict()
+DEBUG_MODE = False
 
 import logging
 LOG = logging.getLogger(__name__)
 
 def make_ydl_opts(output_dir: str,
                   cookiefile: Optional[str],
-                  use_browser_cookies: bool) -> Dict[str, Any]:
+                  use_browser_cookies: bool,
+                  debug_mode=False) -> Dict[str, Any]:
     # Ensure output_dir exists
     os.makedirs(output_dir, exist_ok=True)
 
@@ -48,6 +50,17 @@ def make_ydl_opts(output_dir: str,
     # format": "bv*[height=1080]+ba/best",
     ### merge into mp4 (container) and force conversion to mp4 (H.264) later
     # "format": "bv*[height=1080]+ba/best",
+    # "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4", # forces MP4 output
+    # "format": "bv*+ba/b",
+    log_configs: Dict[str, Any] = {"verbose": False, "quiet": False}
+    if debug_mode:
+        log_configs["verbose"] = True
+        log_configs["quiet"] = False
+        log_configs["extractor_args"] = {
+            'youtube': {  # or the specific extractor name you need
+                'jsc_trace': ['false'] # it's weird but it expects a list and lowercase boolean str.
+            }
+        }
     ydl_opts: Dict[str, Any] = {
         # Template: base / playlist_title / title.ext
         "outtmpl": os.path.join(output_dir, "%(playlist_title)s/%(title)s.%(ext)s"),
@@ -57,16 +70,11 @@ def make_ydl_opts(output_dir: str,
         "retries": 10,                # retry network issues
         "concurrent_fragment_downloads": 5,
         "nooverwrites": True,
-        # "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4", # forces MP4 output
-        # "format": "bv*+ba/b",
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
         # be a bit quieter about cookies/js runtime if we set extractor args below
         # "extractor_args": {"youtube": {"player_client": "default"}},
         # hooks: progress (download), postprocessor events
         "progress_hooks": [progress_hook],
-        # avoid printing full debug stack by default
-        "quiet": False,
-        "verbose": False,
         # Fail if merge can't happen
         # abort if incompatible streams are selected
         # print a clear FFmpeg error
@@ -75,7 +83,11 @@ def make_ydl_opts(output_dir: str,
         "merge_output_format": "mp4",
         "compat_opts": ["force-merge"],
         "postprocessor_hooks": [post_hook, verify_output],
+
+        # This is to correctly set up Deno JS challenge solver
+        "remote_components": ["ejs:github", 'ejs:npm'], # this is to allow to download JS dependencies for Deno. By default it is false
     }
+    ydl_opts.update(log_configs)
 
     # Use browser cookies if requested
     if use_browser_cookies:
@@ -215,7 +227,8 @@ def download_url(url: str, output_dir: str, idx: int, total: int,
 
     ydl_opts = make_ydl_opts(output_dir=output_dir,
                              cookiefile=cookiefile,
-                             use_browser_cookies=use_browser_cookies)
+                             use_browser_cookies=use_browser_cookies,
+                             debug_mode=DEBUG_MODE)
     # Additional user-friendly options
     ydl_opts.update({
         "nopart": False,   # keep .part files to allow resuming
@@ -245,7 +258,7 @@ def build_argparser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[List[str]] = None) -> None:
     args = build_argparser().parse_args(argv)
-    level = LoggingUtils.init_with_basic_config(debug=True)
+    level = LoggingUtils.init_with_basic_config(debug=DEBUG_MODE)
 
     try:
         urls = FileUtils.load_urls(args.urls_file)
@@ -264,7 +277,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     if args.no_reencode:
         # We will monkey-patch make_ydl_opts behavior by re-calling it and removing postprocessors
         ydl_opts_sample = make_ydl_opts(output_dir=args.output_dir, cookiefile=args.cookiefile,
-                                        use_browser_cookies=use_browser_cookies)
+                                        use_browser_cookies=use_browser_cookies,
+                                        debug_mode=DEBUG_MODE)
         if "postprocessors" in ydl_opts_sample:
             del ydl_opts_sample["postprocessors"]
         # But since download_url builds its own opts, we'll pass a flag via environment variable
