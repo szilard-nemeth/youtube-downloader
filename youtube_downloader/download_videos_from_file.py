@@ -9,6 +9,7 @@ import sys
 import argparse
 import pathlib
 import threading
+from collections import defaultdict
 from typing import List, Dict, Any, Optional
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
@@ -27,7 +28,8 @@ except Exception:
 
 LOCK = threading.Lock()
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.expanduser("~"), "yt-dlp-downloads")
-PROCESSED_FILES = dict()
+PROCESSED_URLS = set()
+PROCESSED_PLAYLIST_URLS = defaultdict(list)
 DEBUG_MODE = False
 
 import logging
@@ -164,6 +166,7 @@ def verify_output(d: Dict[str, Any]) -> None:
     info_dict = d.get("info_dict", {})
     filepath = info_dict.get("filepath")
     status = d.get("status")
+    playlist_id = info_dict.get("playlist_id")
 
     if status != "finished":
         return
@@ -210,9 +213,12 @@ def verify_output(d: Dict[str, Any]) -> None:
         raise DownloadError(f"Output file has NO video stream: {filepath}")
 
     # Skip duplicates
-    if url in PROCESSED_FILES:
-        return
-    PROCESSED_FILES[url] = filepath
+    if playlist_id:
+        PROCESSED_PLAYLIST_URLS[playlist_id].append(url)
+    else:
+        if url in PROCESSED_URLS:
+            return
+        PROCESSED_URLS.add(url)
     # optional: also check duration > 0, width/height, etc.
 
 
@@ -242,6 +248,40 @@ def download_url(url: str, output_dir: str, idx: int, total: int,
         print(f"{Fore.RED}[ERROR]{Style.RESET_ALL} Failed to download {url}: {e}")
     except Exception as e:
         print(f"{Fore.RED}[ERROR]{Style.RESET_ALL} Unexpected error for {url}: {e}")
+
+def get_playlist_urls(playlist_url: str) -> list[str]:
+    ydl_opts = {
+        "quiet": True,
+        "skip_download": True,
+        "extract_flat": True,   # IMPORTANT: don't resolve each video, fast listing
+    }
+
+    urls = []
+
+    with YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(playlist_url, download=False)
+
+        # YouTube playlists store entries under "entries"
+        for entry in info.get("entries", []):
+            if entry is None:
+                continue
+
+            # entry["url"] is a video ID or full URL depending on extractor
+            video_id_or_url = entry.get("url")
+
+            # If it's just an ID, make it a full link
+            if len(video_id_or_url) == 11:  # YouTube video ID length
+                urls.append(f"https://www.youtube.com/watch?v={video_id_or_url}")
+            else:
+                urls.append(video_id_or_url)
+
+    return urls
+
+def extract_playlist_id(url: str) -> str | None:
+    from urllib.parse import urlparse, parse_qs
+    parsed = urlparse(url)
+    query_params = parse_qs(parsed.query)
+    return query_params.get("list", [None])[0]
 
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Download YouTube URLs (one per line) via yt-dlp.")
@@ -285,6 +325,15 @@ def main(argv: Optional[List[str]] = None) -> None:
         # Simpler approach: warn the user that no re-encode is set and rely on default in make_ydl_opts
         print(f"{Fore.YELLOW}Warning: No re-encode requested; certain VP9 WebM -> MP4 merges may not display video.{Style.RESET_ALL}")
 
+
+    videos_by_playlist_id: Dict[str, List[str]] = {}
+    playlist_urls = [url for url in urls if "playlist?" in url]
+    for playlist_url in playlist_urls:
+        # example: https://youtube.com/playlist?list=PLZRRxQcaEjA4qyEuYfAMCazlL0vQDkIj2&si=8vpeWaSLHyCdQ0pr
+        # extract the playlist id: 'PLZRRxQcaEjA4qyEuYfAMCazlL0vQDkIj2'
+        playlist_id = extract_playlist_id(playlist_url)
+        videos_by_playlist_id[playlist_id] = get_playlist_urls(playlist_url)
+
     total = len(urls)
     for idx, url in enumerate(urls, start=1):
         download_url(url=url,
@@ -295,11 +344,24 @@ def main(argv: Optional[List[str]] = None) -> None:
                      use_browser_cookies=use_browser_cookies)
 
     # Ensure all files were processed by ffprobe
-    processed_set = set(PROCESSED_FILES.keys())
-    all_urls = set(urls)
-    diff = all_urls.difference(processed_set)
+    normal_video_urls = set([url for url in urls if "playlist?" not in url])
+    diff = normal_video_urls.difference(PROCESSED_URLS)
     if diff:
         raise ValueError("The following URLs result files were not processed by ffprobe: {}".format(diff))
+
+
+    unprocessed = {}
+    found_diff = False
+    for playlist_id, videos in videos_by_playlist_id.items():
+        if playlist_id not in PROCESSED_PLAYLIST_URLS:
+            unprocessed[playlist_id] = videos
+        else:
+            diff = set(videos).difference(set(PROCESSED_PLAYLIST_URLS[playlist_id]))
+            if diff:
+                found_diff = True
+                unprocessed[playlist_id] = diff
+    if found_diff:
+        raise ValueError("The following URLs result files were not processed by ffprobe for playlists: {}".format(unprocessed))
 
 if __name__ == "__main__":
     main()
