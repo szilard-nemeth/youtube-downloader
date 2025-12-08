@@ -296,6 +296,37 @@ def build_argparser() -> argparse.ArgumentParser:
                    help="Don't force re-encoding to H.264; may result in MP4 with no visible video for VP9 sources.")
     return p
 
+
+def ensure_all_videos_processed(urls: List[str]):
+    videos_by_playlist_id: Dict[str, List[str]] = {}
+    playlist_urls = [url for url in urls if "playlist?" in url]
+    for playlist_url in playlist_urls:
+        # example: https://youtube.com/playlist?list=PLZRRxQcaEjA4qyEuYfAMCazlL0vQDkIj2&si=8vpeWaSLHyCdQ0pr
+        # extract the playlist id: 'PLZRRxQcaEjA4qyEuYfAMCazlL0vQDkIj2'
+        playlist_id = extract_playlist_id(playlist_url)
+        videos_by_playlist_id[playlist_id] = get_playlist_urls(playlist_url)
+
+    # Ensure all files were processed by ffprobe
+    normal_video_urls = set([url for url in urls if "playlist?" not in url])
+    diff = normal_video_urls.difference(PROCESSED_URLS)
+    if diff:
+        raise ValueError("The following URLs result files were not processed by ffprobe: {}".format(diff))
+
+
+    unprocessed = {}
+    found_diff = False
+    for playlist_id, videos in videos_by_playlist_id.items():
+        if playlist_id not in PROCESSED_PLAYLIST_URLS:
+            unprocessed[playlist_id] = videos
+        else:
+            diff = set(videos).difference(set(PROCESSED_PLAYLIST_URLS[playlist_id]))
+            if diff:
+                found_diff = True
+                unprocessed[playlist_id] = diff
+    if found_diff:
+        raise ValueError("The following URLs result files were not processed by ffprobe for playlists: {}".format(unprocessed))
+
+
 def main(argv: Optional[List[str]] = None) -> None:
     args = build_argparser().parse_args(argv)
     level = LoggingUtils.init_with_basic_config(debug=DEBUG_MODE)
@@ -326,14 +357,6 @@ def main(argv: Optional[List[str]] = None) -> None:
         print(f"{Fore.YELLOW}Warning: No re-encode requested; certain VP9 WebM -> MP4 merges may not display video.{Style.RESET_ALL}")
 
 
-    videos_by_playlist_id: Dict[str, List[str]] = {}
-    playlist_urls = [url for url in urls if "playlist?" in url]
-    for playlist_url in playlist_urls:
-        # example: https://youtube.com/playlist?list=PLZRRxQcaEjA4qyEuYfAMCazlL0vQDkIj2&si=8vpeWaSLHyCdQ0pr
-        # extract the playlist id: 'PLZRRxQcaEjA4qyEuYfAMCazlL0vQDkIj2'
-        playlist_id = extract_playlist_id(playlist_url)
-        videos_by_playlist_id[playlist_id] = get_playlist_urls(playlist_url)
-
     total = len(urls)
     for idx, url in enumerate(urls, start=1):
         download_url(url=url,
@@ -343,25 +366,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                      cookiefile=args.cookiefile,
                      use_browser_cookies=use_browser_cookies)
 
-    # Ensure all files were processed by ffprobe
-    normal_video_urls = set([url for url in urls if "playlist?" not in url])
-    diff = normal_video_urls.difference(PROCESSED_URLS)
-    if diff:
-        raise ValueError("The following URLs result files were not processed by ffprobe: {}".format(diff))
-
-
-    unprocessed = {}
-    found_diff = False
-    for playlist_id, videos in videos_by_playlist_id.items():
-        if playlist_id not in PROCESSED_PLAYLIST_URLS:
-            unprocessed[playlist_id] = videos
-        else:
-            diff = set(videos).difference(set(PROCESSED_PLAYLIST_URLS[playlist_id]))
-            if diff:
-                found_diff = True
-                unprocessed[playlist_id] = diff
-    if found_diff:
-        raise ValueError("The following URLs result files were not processed by ffprobe for playlists: {}".format(unprocessed))
+    ensure_all_videos_processed(urls)
 
 if __name__ == "__main__":
     main()
